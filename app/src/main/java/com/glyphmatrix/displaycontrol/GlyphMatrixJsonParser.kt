@@ -95,7 +95,7 @@ object GlyphMatrixJsonParser {
     /**
      * Parse frames format: {"v":1, "frames":[{"d":100, "p":[...]}]}
      * Uses first frame. Values in p are 0-255 intensity (grayscale).
-     * Supports 625 (25x25), 489 (Phone 3 alternate layout), or other sizes - pads/truncates to 625.
+     * 625 = 25x25 row-major. 489 = 21x23 centered in 25x25 (weather/glyph format).
      */
     private fun parseFramesFormat(framesArr: JSONArray): IntArray? {
         if (framesArr.length() == 0) return null
@@ -104,19 +104,49 @@ object GlyphMatrixJsonParser {
         val pArr = firstFrame.getJSONArray("p")
         val inputLen = pArr.length()
         if (inputLen == 0) return null
-        return IntArray(PIXEL_COUNT) { index ->
-            val v = if (index < inputLen) {
-                when (val value = pArr.get(index)) {
-                    is Int -> value
-                    is Long -> value.toInt()
-                    is Double -> value.toInt()
-                    else -> value.toString().toIntOrNull() ?: 0
-                }.coerceIn(0, 255)
-            } else 0
-            // Grayscale: white for snow/weather style
-            Color.argb(255, v, v, v)
+
+        return when {
+            inputLen == PIXEL_COUNT -> {
+                // Standard 25x25 row-major
+                IntArray(PIXEL_COUNT) { index ->
+                    val v = parseFramesIntensity(pArr.get(index))
+                    Color.argb(255, v, v, v)
+                }
+            }
+            inputLen >= 483 -> {
+                // 489-style: 21 rows x 23 cols (483 used). Center in 25x25.
+                val srcW = 23
+                val srcH = 21
+                val offsetX = (MATRIX_SIZE - srcW) / 2
+                val offsetY = (MATRIX_SIZE - srcH) / 2
+                IntArray(PIXEL_COUNT) { index ->
+                    val outRow = index / MATRIX_SIZE
+                    val outCol = index % MATRIX_SIZE
+                    val srcRow = outRow - offsetY
+                    val srcCol = outCol - offsetX
+                    val v = if (srcRow in 0 until srcH && srcCol in 0 until srcW) {
+                        val srcIndex = srcRow * srcW + srcCol
+                        if (srcIndex < inputLen) parseFramesIntensity(pArr.get(srcIndex)) else 0
+                    } else 0
+                    Color.argb(255, v, v, v)
+                }
+            }
+            else -> {
+                // Fallback: linear pad
+                IntArray(PIXEL_COUNT) { index ->
+                    val v = if (index < inputLen) parseFramesIntensity(pArr.get(index)) else 0
+                    Color.argb(255, v, v, v)
+                }
+            }
         }
     }
+
+    private fun parseFramesIntensity(value: Any): Int = when (value) {
+        is Int -> value
+        is Long -> value.toInt()
+        is Double -> value.toInt()
+        else -> value.toString().toIntOrNull() ?: 0
+    }.coerceIn(0, 255)
 
     private fun parseColor(value: Any): Int {
         return when (value) {
