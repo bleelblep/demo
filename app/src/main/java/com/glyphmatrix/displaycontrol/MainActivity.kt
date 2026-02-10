@@ -230,6 +230,37 @@ fun GlyphMatrixDisplayScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Sync and Play/Pause buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+        ) {
+            Button(
+                onClick = { displayManager.sync() },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Sync")
+            }
+            var isPaused by remember { mutableStateOf(false) }
+            Button(
+                onClick = {
+                    isPaused = !isPaused
+                    displayManager.setPaused(isPaused)
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (isPaused) "Play" else "Pause")
+            }
+        }
+        Text(
+            text = "Sync: reset both layers to start together. Play/Pause: freeze or animate.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         Button(
             onClick = {
                 val intent = Intent()

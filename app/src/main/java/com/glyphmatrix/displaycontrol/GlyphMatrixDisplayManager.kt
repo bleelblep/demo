@@ -27,6 +27,7 @@ class GlyphMatrixDisplayManager(private val context: Context) {
 
     private var bgFrameIndex = 0
     private var fgFrameIndex = 0
+    private var isPaused = false
 
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
@@ -82,7 +83,28 @@ class GlyphMatrixDisplayManager(private val context: Context) {
         scheduleNextFrame()
     }
 
+    /** Reset both layers to frame 0 so they start in sync */
+    fun sync() {
+        bgFrameIndex = 0
+        fgFrameIndex = 0
+        updateDisplay()
+        if (!isPaused) scheduleNextFrame()
+    }
+
+    fun setPaused(paused: Boolean) {
+        isPaused = paused
+        if (paused) {
+            animationRunnable?.let { handler.removeCallbacks(it) }
+            animationRunnable = null
+        } else {
+            scheduleNextFrame()
+        }
+    }
+
     private fun scheduleNextFrame() {
+        if (isPaused) return
+        animationRunnable?.let { handler.removeCallbacks(it) }
+
         animationRunnable?.let { handler.removeCallbacks(it) }
 
         val bgFrames = backgroundFrames
@@ -96,6 +118,7 @@ class GlyphMatrixDisplayManager(private val context: Context) {
         updateDisplay()
 
         animationRunnable = Runnable {
+            if (isPaused) return@Runnable
             bgFrames?.let { if (it.size > 1) bgFrameIndex = (bgFrameIndex + 1) % it.size }
             fgFrames?.let { if (it.size > 1) fgFrameIndex = (fgFrameIndex + 1) % it.size }
             scheduleNextFrame()

@@ -10,4 +10,8 @@
     <string name="toy_summary">Shows layered background and foreground on the Glyph Matrix</string>
     <string name="add_to_glyph_toys">Add to Glyph Toys</string>
     <string name="add_to_glyph_toys_hint">Tap to open Settings and add this app to your active Glyph Toys</string>
+    <string name="sync">Sync</string>
+    <string name="sync_hint">Reset both layers to frame 0 so they start together</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
 </resources>
