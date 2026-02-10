@@ -95,20 +95,24 @@ object GlyphMatrixJsonParser {
     /**
      * Parse frames format: {"v":1, "frames":[{"d":100, "p":[...]}]}
      * Uses first frame. Values in p are 0-255 intensity (grayscale).
+     * Supports 625 (25x25), 489 (Phone 3 alternate layout), or other sizes - pads/truncates to 625.
      */
     private fun parseFramesFormat(framesArr: JSONArray): IntArray? {
         if (framesArr.length() == 0) return null
         val firstFrame = framesArr.getJSONObject(0)
         if (!firstFrame.has("p")) return null
         val pArr = firstFrame.getJSONArray("p")
-        if (pArr.length() != PIXEL_COUNT) return null
+        val inputLen = pArr.length()
+        if (inputLen == 0) return null
         return IntArray(PIXEL_COUNT) { index ->
-            val v = when (val value = pArr.get(index)) {
-                is Int -> value
-                is Long -> value.toInt()
-                is Double -> value.toInt()
-                else -> value.toString().toIntOrNull() ?: 0
-            }.coerceIn(0, 255)
+            val v = if (index < inputLen) {
+                when (val value = pArr.get(index)) {
+                    is Int -> value
+                    is Long -> value.toInt()
+                    is Double -> value.toInt()
+                    else -> value.toString().toIntOrNull() ?: 0
+                }.coerceIn(0, 255)
+            } else 0
             // Grayscale: white for snow/weather style
             Color.argb(255, v, v, v)
         }
