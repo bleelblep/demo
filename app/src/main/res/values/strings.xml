@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Glyph Matrix Display</string>
+    <string name="select_background">Select Background JSON</string>
+    <string name="select_foreground">Select Foreground JSON</string>
+    <string name="background_brightness">Background Brightness</string>
+    <string name="apply_to_matrix">Apply to Glyph Matrix</string>
+    <string name="no_background">No background selected</string>
+    <string name="no_foreground">No foreground selected</string>
+    <string name="toy_name">Layered Display</string>
+    <string name="toy_summary">Shows layered background and foreground on the Glyph Matrix</string>
+    <string name="add_to_glyph_toys">Add to Glyph Toys</string>
+    <string name="add_to_glyph_toys_hint">Tap to open Settings and add this app to your active Glyph Toys</string>
+    <string name="sync">Sync</string>
+    <string name="sync_hint">Reset both layers to frame 0 so they start together</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+</resources>
