@@ -1,5 +1,7 @@
 package com.glyphmatrix.displaycontrol
 
+import android.content.ComponentName
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -57,20 +59,27 @@ class MainActivity : ComponentActivity() {
                 ) {
                     GlyphMatrixDisplayScreen(
                         displayManager = displayManager,
-                        onBackgroundSelected = { uri -> loadJson(uri) { displayManager.setBackground(it) } },
-                        onForegroundSelected = { uri -> loadJson(uri) { displayManager.setForeground(it) } }
+                        onBackgroundSelected = { uri -> loadJson(uri) { json, pixels ->
+                            displayManager.setBackground(pixels)
+                            persistForToy(DisplayControlToyService.PREF_BACKGROUND_JSON, json)
+                        }},
+                        onForegroundSelected = { uri -> loadJson(uri) { json, pixels ->
+                            displayManager.setForeground(pixels)
+                            persistForToy(DisplayControlToyService.PREF_FOREGROUND_JSON, json)
+                        }}
                     )
                 }
             }
         }
     }
 
-    private fun loadJson(uri: Uri, onLoaded: (IntArray?) -> Unit) {
+    private fun loadJson(uri: Uri, onLoaded: (String, IntArray) -> Unit) {
         try {
             contentResolver.openInputStream(uri)?.use { stream ->
-                val pixels = GlyphMatrixJsonParser.parse(stream)
+                val jsonString = stream.bufferedReader().readText()
+                val pixels = GlyphMatrixJsonParser.parse(jsonString)
                 if (pixels != null) {
-                    onLoaded(pixels)
+                    onLoaded(jsonString, pixels)
                     runOnUiThread {
                         Toast.makeText(this, "JSON loaded successfully", Toast.LENGTH_SHORT).show()
                     }
@@ -89,6 +98,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun persistForToy(key: String, value: String?) {
+        getSharedPreferences(DisplayControlToyService.PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putString(key, value)
+            .apply()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (::displayManager.isInitialized) {
@@ -103,11 +119,14 @@ fun GlyphMatrixDisplayScreen(
     onBackgroundSelected: (Uri) -> Unit,
     onForegroundSelected: (Uri) -> Unit
 ) {
-    var backgroundBrightness by remember { mutableFloatStateOf(1f) }
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences(DisplayControlToyService.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    var backgroundBrightness by remember { mutableFloatStateOf(prefs.getInt(DisplayControlToyService.PREF_BACKGROUND_BRIGHTNESS, 255) / 255f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        displayManager.setBackgroundBrightness((backgroundBrightness * 255).toInt())
+    }
     var backgroundFileName by remember { mutableStateOf<String?>(null) }
     var foregroundFileName by remember { mutableStateOf<String?>(null) }
-
-    val context = LocalContext.current
 
     val backgroundPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -173,7 +192,9 @@ fun GlyphMatrixDisplayScreen(
             value = backgroundBrightness,
             onValueChange = {
                 backgroundBrightness = it
-                displayManager.setBackgroundBrightness((it * 255).toInt())
+                val brightnessInt = (it * 255).toInt()
+                displayManager.setBackgroundBrightness(brightnessInt)
+                prefs.edit().putInt(DisplayControlToyService.PREF_BACKGROUND_BRIGHTNESS, brightnessInt).apply()
             },
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(
@@ -198,10 +219,33 @@ fun GlyphMatrixDisplayScreen(
             Text(foregroundFileName ?: "Select Foreground JSON")
         }
 
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = {
+                val intent = Intent()
+                intent.component = ComponentName("com.nothing.thirdparty", "com.nothing.thirdparty.matrix.toys.manager.ToysManagerActivity")
+                try {
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Open Settings > Glyph > Glyph Toys to add this app", Toast.LENGTH_LONG).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Add to Glyph Toys")
+        }
+        Text(
+            text = "Tap to open Settings and add \"Layered Display\" to your active Glyph Toys",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "JSON Format: 25×25 matrix (625 pixels). Use \"pixels\" array or \"rows\" array. Colors: hex (#RRGGBB) or integer (0xAARRGGBB).",
+            text = "JSON formats: \"pixels\" or \"rows\" (625 values). Animation: {\"frames\":[{\"p\":[...]}]} - uses first frame, values 0-255 as grayscale.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             modifier = Modifier.padding(horizontal = 8.dp)

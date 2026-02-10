@@ -26,6 +26,13 @@ import java.io.InputStream
  *   ]
  * }
  *
+ * Format 3 - Animation frames (uses first frame):
+ * {
+ *   "v": 1,
+ *   "frames": [{"d": 100, "p": [0, 40, 80, ...]}, ...]
+ * }
+ * Values in "p" are 0-255 intensity (grayscale); converted to white for display.
+ *
  * Colors can be: integer (0xAARRGGBB), hex string "#RRGGBB" or "#AARRGGBB"
  */
 object GlyphMatrixJsonParser {
@@ -54,6 +61,7 @@ object GlyphMatrixJsonParser {
         return try {
             val json = JSONObject(jsonString)
             val pixels = when {
+                json.has("frames") -> parseFramesFormat(json.getJSONArray("frames"))
                 json.has("pixels") -> parsePixelsArray(json.getJSONArray("pixels"))
                 json.has("rows") -> parseRowsArray(json.getJSONArray("rows"))
                 else -> null
@@ -82,6 +90,28 @@ object GlyphMatrixJsonParser {
             }
         }
         return result
+    }
+
+    /**
+     * Parse frames format: {"v":1, "frames":[{"d":100, "p":[...]}]}
+     * Uses first frame. Values in p are 0-255 intensity (grayscale).
+     */
+    private fun parseFramesFormat(framesArr: JSONArray): IntArray? {
+        if (framesArr.length() == 0) return null
+        val firstFrame = framesArr.getJSONObject(0)
+        if (!firstFrame.has("p")) return null
+        val pArr = firstFrame.getJSONArray("p")
+        if (pArr.length() != PIXEL_COUNT) return null
+        return IntArray(PIXEL_COUNT) { index ->
+            val v = when (val value = pArr.get(index)) {
+                is Int -> value
+                is Long -> value.toInt()
+                is Double -> value.toInt()
+                else -> value.toString().toIntOrNull() ?: 0
+            }.coerceIn(0, 255)
+            // Grayscale: white for snow/weather style
+            Color.argb(255, v, v, v)
+        }
     }
 
     private fun parseColor(value: Any): Int {

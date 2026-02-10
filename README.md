@@ -50,6 +50,7 @@ Exactly 625 values (25×25). Row-major order.
 Sample JSON files are included in `app/src/main/assets/samples/`:
 - `background_example.json` - Soft gradient background
 - `foreground_example.json` - Simple foreground overlay
+- `FG_Weather_Snow.json` - Animation format (frames with `d` duration and `p` pixel array; 0-255 grayscale values)
 
 ## Building
 
@@ -70,10 +71,10 @@ The project includes a GitHub Actions workflow that builds on push/PR. If `app/l
 
 1. Install the app on your Nothing Phone 3
 2. Grant the required Glyph Matrix permission when prompted
-3. Tap **Select Background JSON** to choose a JSON file (or use a file manager)
+3. Tap **Select Background JSON** and **Select Foreground JSON** to choose your layer files
 4. Use the **Background Brightness** slider to dim/brighten the background
-5. Tap **Select Foreground JSON** to choose an overlay
-6. The composite image appears on the Glyph Matrix
+5. The composite image appears on the Glyph Matrix when the app is open
+6. **Add to Glyph Toys**: Tap the button to open Settings → Glyph Toys, then add "Layered Display" to your active toys. Once added, your layered design will show when you cycle to it with the Glyph Button (short press on the back)
 
 ## License
 

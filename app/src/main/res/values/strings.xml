@@ -6,4 +6,8 @@
     <string name="apply_to_matrix">Apply to Glyph Matrix</string>
     <string name="no_background">No background selected</string>
     <string name="no_foreground">No foreground selected</string>
+    <string name="toy_name">Layered Display</string>
+    <string name="toy_summary">Shows layered background and foreground on the Glyph Matrix</string>
+    <string name="add_to_glyph_toys">Add to Glyph Toys</string>
+    <string name="add_to_glyph_toys_hint">Tap to open Settings and add this app to your active Glyph Toys</string>
 </resources>
