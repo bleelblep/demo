@@ -1,0 +1,54 @@
+name: Build Android App
+
+on:
+  push:
+    branches: [ main, master, cursor/glyphmatrix-app-display-control-b4af ]
+  pull_request:
+    branches: [ main, master, cursor/glyphmatrix-app-display-control-b4af ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download GlyphMatrix SDK (if not present)
+        run: |
+          if [ ! -f app/libs/glyph-matrix-sdk-1.0.aar ]; then
+            mkdir -p app/libs
+            curl -sL -o app/libs/glyph-matrix-sdk-1.0.aar \
+              "https://github.com/Nothing-Developer-Programme/GlyphMatrix-Developer-Kit/raw/main/glyph-matrix-sdk-1.0.aar"
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
