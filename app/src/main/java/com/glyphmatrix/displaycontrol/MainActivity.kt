@@ -59,12 +59,20 @@ class MainActivity : ComponentActivity() {
                 ) {
                     GlyphMatrixDisplayScreen(
                         displayManager = displayManager,
-                        onBackgroundSelected = { uri -> loadJson(uri) { json, pixels ->
-                            displayManager.setBackground(pixels)
+                        onBackgroundSelected = { uri -> loadJson(uri) { json, frames ->
+                            if (frames.size > 1) {
+                                displayManager.setBackgroundAnimation(frames)
+                            } else {
+                                displayManager.setBackground(frames.firstOrNull()?.pixels)
+                            }
                             persistForToy(DisplayControlToyService.PREF_BACKGROUND_JSON, json)
                         }},
-                        onForegroundSelected = { uri -> loadJson(uri) { json, pixels ->
-                            displayManager.setForeground(pixels)
+                        onForegroundSelected = { uri -> loadJson(uri) { json, frames ->
+                            if (frames.size > 1) {
+                                displayManager.setForegroundAnimation(frames)
+                            } else {
+                                displayManager.setForeground(frames.firstOrNull()?.pixels)
+                            }
                             persistForToy(DisplayControlToyService.PREF_FOREGROUND_JSON, json)
                         }}
                     )
@@ -73,15 +81,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun loadJson(uri: Uri, onLoaded: (String, IntArray) -> Unit) {
+    private fun loadJson(uri: Uri, onLoaded: (String, List<AnimationFrame>) -> Unit) {
         try {
             contentResolver.openInputStream(uri)?.use { stream ->
                 val jsonString = stream.bufferedReader().readText()
-                val pixels = GlyphMatrixJsonParser.parse(jsonString)
-                if (pixels != null) {
-                    onLoaded(jsonString, pixels)
+                val frames = GlyphMatrixJsonParser.parseAnimation(jsonString)
+                if (frames != null && frames.isNotEmpty()) {
+                    onLoaded(jsonString, frames)
                     runOnUiThread {
-                        Toast.makeText(this, "JSON loaded successfully", Toast.LENGTH_SHORT).show()
+                        val msg = if (frames.size > 1) "Loaded ${frames.size} frames" else "JSON loaded"
+                        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                     }
                 } else {
                     runOnUiThread {

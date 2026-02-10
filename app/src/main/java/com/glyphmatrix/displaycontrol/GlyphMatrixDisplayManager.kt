@@ -2,7 +2,8 @@ package com.glyphmatrix.displaycontrol
 
 import android.content.ComponentName
 import android.content.Context
-import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import com.nothing.ketchum.Glyph
 import com.nothing.ketchum.GlyphMatrixFrame
 import com.nothing.ketchum.GlyphMatrixManager
@@ -10,21 +11,28 @@ import com.nothing.ketchum.GlyphMatrixObject
 
 /**
  * Manages the Glyph Matrix display with layered background and foreground.
+ * Supports animation: multiple frames cycle with their specified durations.
  */
 class GlyphMatrixDisplayManager(private val context: Context) {
 
     private var glyphMatrixManager: GlyphMatrixManager? = null
     private var isConnected = false
 
-    private var backgroundPixels: IntArray? = null
-    private var foregroundPixels: IntArray? = null
+    private var backgroundFrames: List<AnimationFrame>? = null
+    private var foregroundFrames: List<AnimationFrame>? = null
     private var backgroundBrightness = 255
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var animationRunnable: Runnable? = null
+
+    private var bgFrameIndex = 0
+    private var fgFrameIndex = 0
 
     private val callback = object : GlyphMatrixManager.Callback {
         override fun onServiceConnected(componentName: ComponentName?) {
             isConnected = true
             glyphMatrixManager?.register(Glyph.DEVICE_23112)
-            updateDisplay()
+            scheduleNextFrame()
         }
 
         override fun onServiceDisconnected(componentName: ComponentName?) {
@@ -38,61 +46,98 @@ class GlyphMatrixDisplayManager(private val context: Context) {
     }
 
     fun unInit() {
+        animationRunnable?.let { handler.removeCallbacks(it) }
+        animationRunnable = null
         glyphMatrixManager?.closeAppMatrix()
         glyphMatrixManager?.unInit()
         glyphMatrixManager = null
     }
 
     fun setBackground(pixels: IntArray?) {
-        backgroundPixels = pixels
-        updateDisplay()
+        backgroundFrames = pixels?.let { listOf(AnimationFrame(it, 100)) }
+        bgFrameIndex = 0
+        scheduleNextFrame()
+    }
+
+    fun setBackgroundAnimation(frames: List<AnimationFrame>?) {
+        backgroundFrames = frames
+        bgFrameIndex = 0
+        scheduleNextFrame()
     }
 
     fun setForeground(pixels: IntArray?) {
-        foregroundPixels = pixels
-        updateDisplay()
+        foregroundFrames = pixels?.let { listOf(AnimationFrame(it, 100)) }
+        fgFrameIndex = 0
+        scheduleNextFrame()
+    }
+
+    fun setForegroundAnimation(frames: List<AnimationFrame>?) {
+        foregroundFrames = frames
+        fgFrameIndex = 0
+        scheduleNextFrame()
     }
 
     fun setBackgroundBrightness(brightness: Int) {
         backgroundBrightness = brightness.coerceIn(0, 255)
+        scheduleNextFrame()
+    }
+
+    private fun scheduleNextFrame() {
+        animationRunnable?.let { handler.removeCallbacks(it) }
+
+        val bgFrames = backgroundFrames
+        val fgFrames = foregroundFrames
+        if (bgFrames == null && fgFrames == null) return
+
+        val bgDuration = bgFrames?.getOrNull(bgFrameIndex)?.durationMs ?: 100
+        val fgDuration = fgFrames?.getOrNull(fgFrameIndex)?.durationMs ?: 100
+        val delayMs = minOf(bgDuration, fgDuration).coerceAtLeast(16)
+
         updateDisplay()
+
+        animationRunnable = Runnable {
+            bgFrames?.let { if (it.size > 1) bgFrameIndex = (bgFrameIndex + 1) % it.size }
+            fgFrames?.let { if (it.size > 1) fgFrameIndex = (fgFrameIndex + 1) % it.size }
+            scheduleNextFrame()
+        }
+        handler.postDelayed(animationRunnable!!, delayMs.toLong())
     }
 
     private fun updateDisplay() {
         val gm = glyphMatrixManager ?: return
         if (!isConnected) return
-        if (backgroundPixels == null && foregroundPixels == null) return
+        if (backgroundFrames == null && foregroundFrames == null) return
 
         val builder = GlyphMatrixFrame.Builder()
 
-        // Add background as low layer (bottom)
-        backgroundPixels?.let { pixels ->
-            val adjustedPixels = GlyphMatrixJsonParser.applyBrightness(pixels, backgroundBrightness)
-            val bitmap = GlyphMatrixJsonParser.pixelsToBitmap(adjustedPixels)
-            val bgObject = GlyphMatrixObject.Builder()
-                .setImageSource(bitmap)
-                .setPosition(0, 0)
-                .setScale(100)
-                .setBrightness(255)
-                .build()
-            builder.addLow(bgObject)
+        backgroundFrames?.getOrNull(bgFrameIndex)?.pixels?.let { pixels ->
+            val adjusted = GlyphMatrixJsonParser.applyBrightness(pixels, backgroundBrightness)
+            val bitmap = GlyphMatrixJsonParser.pixelsToBitmap(adjusted)
+            builder.addLow(
+                GlyphMatrixObject.Builder()
+                    .setImageSource(bitmap)
+                    .setPosition(0, 0)
+                    .setScale(100)
+                    .setBrightness(255)
+                    .build()
+            )
         }
 
-        // Add foreground as top layer
-        foregroundPixels?.let { pixels ->
+        foregroundFrames?.getOrNull(fgFrameIndex)?.pixels?.let { pixels ->
             val bitmap = GlyphMatrixJsonParser.pixelsToBitmap(pixels)
-            val fgObject = GlyphMatrixObject.Builder()
-                .setImageSource(bitmap)
-                .setPosition(0, 0)
-                .setScale(100)
-                .setBrightness(255)
-                .build()
-            builder.addTop(fgObject)
+            builder.addTop(
+                GlyphMatrixObject.Builder()
+                    .setImageSource(bitmap)
+                    .setPosition(0, 0)
+                    .setScale(100)
+                    .setBrightness(255)
+                    .build()
+            )
         }
 
         val frame = builder.build(context)
         gm.setAppMatrixFrame(frame.render())
     }
 
-    fun hasContent(): Boolean = backgroundPixels != null || foregroundPixels != null
+    fun hasContent(): Boolean = backgroundFrames != null || foregroundFrames != null
 }

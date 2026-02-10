@@ -26,15 +26,17 @@ import java.io.InputStream
  *   ]
  * }
  *
- * Format 3 - Animation frames (uses first frame):
+ * Format 3 - Animation frames (GlyphMatrixEditor):
  * {
  *   "v": 1,
  *   "frames": [{"d": 100, "p": [0, 40, 80, ...]}, ...]
  * }
- * Values in "p" are 0-255 intensity (grayscale); converted to white for display.
+ * Values in "p" are 0-255 intensity (grayscale); "d" is duration in ms.
  *
  * Colors can be: integer (0xAARRGGBB), hex string "#RRGGBB" or "#AARRGGBB"
  */
+data class AnimationFrame(val pixels: IntArray, val durationMs: Int)
+
 object GlyphMatrixJsonParser {
 
     private const val MATRIX_SIZE = 25
@@ -63,18 +65,34 @@ object GlyphMatrixJsonParser {
 
     /**
      * Parse JSON string and return 625 color integers (25x25 matrix).
-     * Returns null if parsing fails.
+     * For frames format, returns first frame only. Use parseAnimation for all frames.
      */
     fun parse(jsonString: String): IntArray? {
+        val frames = parseAnimation(jsonString) ?: return null
+        return frames.firstOrNull()?.pixels
+    }
+
+    /**
+     * Parse JSON and return all animation frames with durations.
+     * For non-animation formats (pixels/rows), returns single frame with 100ms duration.
+     */
+    fun parseAnimation(jsonString: String): List<AnimationFrame>? {
         return try {
             val json = JSONObject(jsonString)
-            val pixels = when {
-                json.has("frames") -> parseFramesFormat(json.getJSONArray("frames"))
-                json.has("pixels") -> parsePixelsArray(json.getJSONArray("pixels"))
-                json.has("rows") -> parseRowsArray(json.getJSONArray("rows"))
+            when {
+                json.has("frames") -> parseAllFrames(json.getJSONArray("frames"))
+                json.has("pixels") -> {
+                    parsePixelsArray(json.getJSONArray("pixels"))?.let { pixels ->
+                        listOf(AnimationFrame(pixels, 100))
+                    }
+                }
+                json.has("rows") -> {
+                    parseRowsArray(json.getJSONArray("rows"))?.let { pixels ->
+                        listOf(AnimationFrame(pixels, 100))
+                    }
+                }
                 else -> null
             }
-            pixels
         } catch (e: Exception) {
             null
         }
@@ -100,31 +118,30 @@ object GlyphMatrixJsonParser {
         return result
     }
 
-    /**
-     * Parse frames format from GlyphMatrixEditor: {"v":1, "frames":[{"d":100, "p":[...]}]}
-     * Values in p are 0-255 intensity (grayscale).
-     * 625 = 25x25 row-major. 489 = diamond shape per GlyphMatrixEditor (shapePattern).
-     * @see <a href="https://github.com/pauwma/GlyphMatrixEditor">GlyphMatrixEditor</a>
-     */
-    private fun parseFramesFormat(framesArr: JSONArray): IntArray? {
+    private fun parseAllFrames(framesArr: JSONArray): List<AnimationFrame>? {
         if (framesArr.length() == 0) return null
-        val firstFrame = framesArr.getJSONObject(0)
-        if (!firstFrame.has("p")) return null
-        val pArr = firstFrame.getJSONArray("p")
+        val result = mutableListOf<AnimationFrame>()
+        for (i in 0 until framesArr.length()) {
+            val frameObj = framesArr.getJSONObject(i)
+            val pixels = parseFramePixels(frameObj.optJSONArray("p")) ?: continue
+            val durationMs = frameObj.optInt("d", 100).coerceIn(16, 10000) // 16ms-10s
+            result.add(AnimationFrame(pixels, durationMs))
+        }
+        return if (result.isEmpty()) null else result
+    }
+
+    private fun parseFramePixels(pArr: JSONArray?): IntArray? {
+        if (pArr == null || pArr.length() == 0) return null
         val inputLen = pArr.length()
-        if (inputLen == 0) return null
 
         return when {
             inputLen == PIXEL_COUNT -> {
-                // Standard 25x25 row-major
                 IntArray(PIXEL_COUNT) { index ->
                     val v = parseFramesIntensity(pArr.get(index))
                     Color.argb(255, v, v, v)
                 }
             }
             inputLen == SHAPE_PATTERN.sum() -> {
-                // GlyphMatrixEditor format: 489 pixels in diamond shape
-                // Each row has shapePattern[row] pixels, centered in 25 cols
                 val output = IntArray(PIXEL_COUNT) { Color.argb(255, 0, 0, 0) }
                 var idx = 0
                 for (row in 0 until MATRIX_SIZE) {
@@ -140,7 +157,6 @@ object GlyphMatrixJsonParser {
                 output
             }
             else -> {
-                // Fallback: linear pad (for other sizes)
                 IntArray(PIXEL_COUNT) { index ->
                     val v = if (index < inputLen) parseFramesIntensity(pArr.get(index)) else 0
                     Color.argb(255, v, v, v)
