@@ -40,6 +40,14 @@ object GlyphMatrixJsonParser {
     private const val MATRIX_SIZE = 25
     private const val PIXEL_COUNT = MATRIX_SIZE * MATRIX_SIZE
 
+    // GlyphMatrixEditor shape: pixels per row (diamond shape, 489 total)
+    // https://github.com/pauwma/GlyphMatrixEditor
+    private val SHAPE_PATTERN = intArrayOf(
+        7, 11, 15, 17, 19, 21, 21, 23, 23,
+        25, 25, 25, 25, 25, 25, 25,
+        23, 23, 21, 21, 19, 17, 15, 11, 7
+    )
+
     /**
      * Parse JSON from input stream and return 625 color integers (25x25 matrix).
      * Returns null if parsing fails.
@@ -93,9 +101,10 @@ object GlyphMatrixJsonParser {
     }
 
     /**
-     * Parse frames format: {"v":1, "frames":[{"d":100, "p":[...]}]}
-     * Uses first frame. Values in p are 0-255 intensity (grayscale).
-     * 625 = 25x25 row-major. 489 = 21x23 centered in 25x25 (weather/glyph format).
+     * Parse frames format from GlyphMatrixEditor: {"v":1, "frames":[{"d":100, "p":[...]}]}
+     * Values in p are 0-255 intensity (grayscale).
+     * 625 = 25x25 row-major. 489 = diamond shape per GlyphMatrixEditor (shapePattern).
+     * @see <a href="https://github.com/pauwma/GlyphMatrixEditor">GlyphMatrixEditor</a>
      */
     private fun parseFramesFormat(framesArr: JSONArray): IntArray? {
         if (framesArr.length() == 0) return null
@@ -113,26 +122,25 @@ object GlyphMatrixJsonParser {
                     Color.argb(255, v, v, v)
                 }
             }
-            inputLen >= 483 -> {
-                // 489-style: 21 rows x 23 cols (483 used). Center in 25x25.
-                val srcW = 23
-                val srcH = 21
-                val offsetX = (MATRIX_SIZE - srcW) / 2
-                val offsetY = (MATRIX_SIZE - srcH) / 2
-                IntArray(PIXEL_COUNT) { index ->
-                    val outRow = index / MATRIX_SIZE
-                    val outCol = index % MATRIX_SIZE
-                    val srcRow = outRow - offsetY
-                    val srcCol = outCol - offsetX
-                    val v = if (srcRow in 0 until srcH && srcCol in 0 until srcW) {
-                        val srcIndex = srcRow * srcW + srcCol
-                        if (srcIndex < inputLen) parseFramesIntensity(pArr.get(srcIndex)) else 0
-                    } else 0
-                    Color.argb(255, v, v, v)
+            inputLen == SHAPE_PATTERN.sum() -> {
+                // GlyphMatrixEditor format: 489 pixels in diamond shape
+                // Each row has shapePattern[row] pixels, centered in 25 cols
+                val output = IntArray(PIXEL_COUNT) { Color.argb(255, 0, 0, 0) }
+                var idx = 0
+                for (row in 0 until MATRIX_SIZE) {
+                    val rowWidth = SHAPE_PATTERN[row]
+                    val startCol = (MATRIX_SIZE - rowWidth) / 2
+                    for (c in 0 until rowWidth) {
+                        if (idx >= inputLen) break
+                        val col = startCol + c
+                        val v = parseFramesIntensity(pArr.get(idx++))
+                        output[row * MATRIX_SIZE + col] = Color.argb(255, v, v, v)
+                    }
                 }
+                output
             }
             else -> {
-                // Fallback: linear pad
+                // Fallback: linear pad (for other sizes)
                 IntArray(PIXEL_COUNT) { index ->
                     val v = if (index < inputLen) parseFramesIntensity(pArr.get(index)) else 0
                     Color.argb(255, v, v, v)
